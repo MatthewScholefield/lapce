@@ -1019,7 +1019,12 @@ impl LapceEditor {
                 info.font_size,
                 &data.config,
             );
-            let y = info.y + text_layout.text.y_offset(info.line_height);
+
+            // 0.01 is to bias rounding towards rendering text higher. Higher text
+            // is more centered because the existing offset is calculated with
+            // respect to the capital letter height but there are often lowercase
+            // letters that are visually shorter
+            let y = info.y + text_layout.text.y_offset(info.line_height) - 0.01;
             let height = text_layout.text.size().height;
             for (x0, x1, style) in text_layout.extra_style.iter() {
                 if let Some(bg) = &style.bg_color {
