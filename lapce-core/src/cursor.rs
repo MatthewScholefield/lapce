@@ -5,7 +5,7 @@ use crate::{
     buffer::Buffer,
     mode::{Mode, MotionMode, VisualMode},
     register::RegisterData,
-    selection::{InsertDrift, SelRegion, Selection},
+    selection::{BoundaryMode, InsertDrift, SelRegion, Selection},
 };
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
@@ -330,7 +330,13 @@ impl Cursor {
         }
     }
 
-    pub fn set_offset(&mut self, offset: usize, modify: bool, new_cursor: bool) {
+    pub fn set_offset(
+        &mut self,
+        offset: usize,
+        modify: bool,
+        new_cursor: bool,
+        buffer: Option<&Buffer>,
+    ) {
         match &self.mode {
             CursorMode::Normal(old_offset) => {
                 if modify && *old_offset != offset {
@@ -370,21 +376,86 @@ impl Cursor {
                         self.set_insert(new_selection);
                     } else {
                         let mut new_selection = selection.clone();
-                        new_selection.add_region(SelRegion::caret(offset));
+                        let new_boundary = if let Some(region) =
+                            new_selection.last_inserted_mut()
+                        {
+                            region.boundary_mode
+                        } else {
+                            None
+                        };
+                        new_selection.add_region(SelRegion::new_with_boundary(
+                            offset,
+                            offset,
+                            None,
+                            new_boundary,
+                        ));
                         self.set_insert(new_selection);
                     }
                 } else if modify {
-                    let mut new_selection = Selection::new();
+                    let mut new_start = offset;
+                    let mut new_end = offset;
+                    let mut new_boundary: Option<BoundaryMode> = None;
                     if let Some(region) = selection.first() {
-                        let new_region = SelRegion::new(region.start, offset, None);
-                        new_selection.add_region(new_region);
-                    } else {
-                        new_selection
-                            .add_region(SelRegion::new(offset, offset, None));
+                        new_boundary = region.boundary_mode;
+                        if let Some(boundary_mode) = region.boundary_mode {
+                            if let Some(buffer) = buffer {
+                                let get_bounds =
+                                    |offset: usize, mode: BoundaryMode| match mode {
+                                        BoundaryMode::Word => {
+                                            let word_start = buffer
+                                                .move_word_backward(
+                                                    offset,
+                                                    Mode::Insert,
+                                                );
+                                            let word_end =
+                                                buffer.move_word_forward(offset);
+                                            (word_start, word_end)
+                                        }
+                                        BoundaryMode::Line => {
+                                            let line_start = buffer.offset_of_line(
+                                                buffer.line_of_offset(offset),
+                                            );
+                                            let line_end = buffer
+                                                .line_end_offset(offset, false);
+                                            (line_start, line_end)
+                                        }
+                                    };
+                                let (max_start, _) =
+                                    get_bounds(region.end, boundary_mode);
+                                let (_, min_end) =
+                                    get_bounds(region.start, boundary_mode);
+                                let (cur_start, cur_end) =
+                                    get_bounds(offset, boundary_mode);
+                                new_start = cur_start.min(max_start);
+                                new_end = cur_end.max(min_end);
+                            }
+                        } else {
+                            new_start = region.start;
+                        }
                     }
+                    let mut new_selection = Selection::new();
+                    new_selection.add_region(SelRegion::new_with_boundary(
+                        new_start,
+                        new_end,
+                        None,
+                        new_boundary,
+                    ));
                     self.set_insert(new_selection);
                 } else {
-                    self.set_insert(Selection::caret(offset));
+                    let mut new_selection = Selection::new();
+                    let new_boundary =
+                        if let Some(region) = selection.last_inserted() {
+                            region.boundary_mode
+                        } else {
+                            None
+                        };
+                    new_selection.add_region(SelRegion::new_with_boundary(
+                        offset,
+                        offset,
+                        None,
+                        new_boundary,
+                    ));
+                    self.set_insert(new_selection);
                 }
             }
         }
@@ -396,6 +467,7 @@ impl Cursor {
         end: usize,
         modify: bool,
         new_cursor: bool,
+        boundary_mode: Option<BoundaryMode>,
     ) {
         match &self.mode {
             CursorMode::Normal(_offset) => {
@@ -425,24 +497,25 @@ impl Cursor {
                 };
             }
             CursorMode::Insert(selection) => {
+                let default_region =
+                    SelRegion::new_with_boundary(start, end, None, boundary_mode);
                 let new_selection = if new_cursor {
                     let mut new_selection = selection.clone();
                     if modify {
                         let new_region =
                             if let Some(last_inserted) = selection.last_inserted() {
-                                last_inserted
-                                    .merge_with(SelRegion::new(start, end, None))
+                                last_inserted.merge_with(default_region)
                             } else {
-                                SelRegion::new(start, end, None)
+                                default_region
                             };
                         new_selection.replace_last_inserted_region(new_region);
                     } else {
-                        new_selection.add_region(SelRegion::new(start, end, None));
+                        new_selection.add_region(default_region);
                     }
                     new_selection
                 } else if modify {
                     let mut new_selection = selection.clone();
-                    new_selection.add_region(SelRegion::new(start, end, None));
+                    new_selection.add_region(default_region);
                     new_selection
                 } else {
                     Selection::region(start, end)

@@ -181,7 +181,10 @@ impl LapceEditor {
                 config,
             );
             let editor = Arc::make_mut(&mut editor_data.editor);
-            editor.cursor.set_offset(new_offset, true, mods.alt());
+            let buffer = editor_data.doc.buffer();
+            editor
+                .cursor
+                .set_offset(new_offset, true, mods.alt(), Some(buffer));
             return;
         }
 

@@ -280,10 +280,11 @@ impl Editor {
                 for region in selection.regions_mut().iter_mut().sorted_by(
                     |region_a, region_b| region_a.start.cmp(&region_b.start),
                 ) {
-                    let new_region = SelRegion::new(
+                    let new_region = SelRegion::new_with_boundary(
                         region.start + adjustment,
                         region.end + adjustment,
                         None,
+                        region.boundary_mode,
                     );
 
                     if let Some(inserted) =
@@ -1063,7 +1064,7 @@ impl Editor {
                 let data = register.unnamed.clone();
                 let mut local_cursor =
                     Cursor::new(CursorMode::Insert(Selection::new()), None, None);
-                local_cursor.set_offset(offset, false, false);
+                local_cursor.set_offset(offset, false, false, None);
                 Self::do_paste(&mut local_cursor, buffer, &data)
             }
             NewLineAbove => {

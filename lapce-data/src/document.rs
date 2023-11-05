@@ -2449,13 +2449,26 @@ impl Document {
             match movement {
                 Movement::Left | Movement::Up => {
                     let leftmost = region.min();
-                    (count - 1, SelRegion::new(leftmost, leftmost, region.horiz))
+                    (
+                        count - 1,
+                        SelRegion::new_with_boundary(
+                            leftmost,
+                            leftmost,
+                            region.horiz,
+                            region.boundary_mode,
+                        ),
+                    )
                 }
                 Movement::Right | Movement::Down => {
                     let rightmost = region.max();
                     (
                         count - 1,
-                        SelRegion::new(rightmost, rightmost, region.horiz),
+                        SelRegion::new_with_boundary(
+                            rightmost,
+                            rightmost,
+                            region.horiz,
+                            region.boundary_mode,
+                        ),
                     )
                 }
                 _ => (count, *region),
@@ -2478,7 +2491,7 @@ impl Document {
             true => region.start,
             false => end,
         };
-        SelRegion::new(start, end, horiz)
+        SelRegion::new_with_boundary(start, end, horiz, region.boundary_mode)
     }
 
     #[allow(clippy::too_many_arguments)]

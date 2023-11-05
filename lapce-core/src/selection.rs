@@ -5,6 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::cursor::ColPosition;
 
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+pub enum BoundaryMode {
+    Word,
+    Line,
+}
+
 /// Indicate whether a delta should be applied inside, outside non-caret selection or
 /// after a caret selection (see [`Selection::apply_delta`].
 #[derive(Copy, Clone)]
@@ -25,6 +31,7 @@ pub struct SelRegion {
     pub end: usize,
     /// Horizontal rules for multiple selection
     pub horiz: Option<ColPosition>,
+    pub boundary_mode: Option<BoundaryMode>,
 }
 
 /// A selection holding one or more [`SelRegion`].
@@ -44,7 +51,26 @@ impl AsRef<Selection> for Selection {
 impl SelRegion {
     /// Creates new [`SelRegion`] from `start` and `end` offset.
     pub fn new(start: usize, end: usize, horiz: Option<ColPosition>) -> SelRegion {
-        SelRegion { start, end, horiz }
+        SelRegion {
+            start,
+            end,
+            horiz,
+            boundary_mode: None,
+        }
+    }
+
+    pub fn new_with_boundary(
+        start: usize,
+        end: usize,
+        horiz: Option<ColPosition>,
+        boundary_mode: Option<BoundaryMode>,
+    ) -> SelRegion {
+        SelRegion {
+            start,
+            end,
+            horiz,
+            boundary_mode,
+        }
     }
 
     /// Creates a caret [`SelRegion`],
@@ -54,6 +80,7 @@ impl SelRegion {
             start: offset,
             end: offset,
             horiz: None,
+            boundary_mode: None,
         }
     }
 
@@ -119,7 +146,8 @@ impl SelRegion {
         } else {
             (new_max, new_min)
         };
-        SelRegion::new(start, end, None)
+        let new_boundary_mode = other.boundary_mode.or(self.boundary_mode);
+        SelRegion::new_with_boundary(start, end, None, new_boundary_mode)
     }
 
     fn should_merge(self, other: SelRegion) -> bool {
@@ -157,6 +185,7 @@ impl Selection {
                 start,
                 end,
                 horiz: None,
+                boundary_mode: None,
             }],
             last_inserted: 0,
         }
@@ -462,10 +491,11 @@ impl Selection {
                 _ => (after, after),
             };
 
-            let new_region = SelRegion::new(
+            let new_region = SelRegion::new_with_boundary(
                 transformer.transform(region.start, start_after),
                 transformer.transform(region.end, end_after),
                 None,
+                region.boundary_mode,
             );
             result.add_region(new_region);
         }
@@ -486,9 +516,14 @@ impl Selection {
             self.add_region(region);
             return;
         }
+        let mut region_mod = region;
+        region_mod.boundary_mode = self
+            .regions
+            .get(self.last_inserted)
+            .and_then(|x| x.boundary_mode);
 
         self.regions.remove(self.last_inserted);
-        self.add_region(region);
+        self.add_region(region_mod);
     }
 
     fn search(&self, offset: usize) -> usize {

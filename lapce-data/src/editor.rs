@@ -24,7 +24,7 @@ use lapce_core::{
     editor::EditType,
     mode::{Mode, MotionMode},
     movement::LineCol,
-    selection::{InsertDrift, Selection},
+    selection::{BoundaryMode, InsertDrift, Selection},
     syntax::edit::SyntaxEdit,
 };
 use lapce_rpc::{plugin::PluginId, proxy::ProxyResponse};
@@ -1362,6 +1362,7 @@ impl LapceEditorBufferData {
             new_offset,
             mouse_event.mods.shift(),
             mouse_event.mods.alt(),
+            None,
         );
 
         let mut go_to_definition = false;
@@ -1409,6 +1410,7 @@ impl LapceEditorBufferData {
             end,
             mouse_event.mods.shift(),
             mouse_event.mods.alt(),
+            Some(BoundaryMode::Word),
         );
     }
 
@@ -1435,6 +1437,7 @@ impl LapceEditorBufferData {
             end,
             mouse_event.mods.shift(),
             mouse_event.mods.alt(),
+            Some(BoundaryMode::Line),
         );
     }
 
